@@ -266,6 +266,12 @@ func (cs *consensusBase) commit(block *hotstuff.Block) {
 		return
 	}
 
+	if block.View() != 0 {
+		cs.logger.Infof("New Block is %v", block)
+		cs.logger.Infof("Hash in new block is %v", block.Hash())
+		cs.logger.Infof("Command in new block is %v", []byte(block.Command()))
+	}
+
 	// prune the blockchain and handle forked blocks
 	forkedBlocks := cs.blockChain.PruneToHeight(block.View())
 	for _, block := range forkedBlocks {

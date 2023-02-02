@@ -5,10 +5,12 @@ package client
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/x509"
 	"errors"
 	"io"
 	"math"
+	"math/big"
 	"sync"
 	"time"
 
@@ -230,21 +232,27 @@ loop:
 			break
 		}
 
-		data := make([]byte, c.payloadSize)
-		n, err := c.reader.Read(data)
-		if err != nil && err != io.EOF {
-			// if we get an error other than EOF
-			return err
-		} else if err == io.EOF && n == 0 && lastCommand > num {
-			lastCommand = num
-			c.logger.Info("Reached end of file. Sending empty commands until last command is executed...")
-		}
+		randData, _ := rand.Int(rand.Reader, big.NewInt(128))
+		// data := make([]byte, c.payloadSize)
+		data := randData.Bytes()
+		c.logger.Infof("Random data %v is %v", randData, data)
+		// n, err := c.reader.Read(data)
+		// if err != nil && err != io.EOF {
+		// 	// if we get an error other than EOF
+		// 	return err
+		// } else if err == io.EOF && n == 0 && lastCommand > num {
+		// 	lastCommand = num
+		// 	c.logger.Info("Reached end of file. Sending empty commands until last command is executed...")
+		// }
 
 		cmd := &clientpb.Command{
 			ClientID:       uint32(c.opts.ID()),
 			SequenceNumber: num,
-			Data:           data[:n],
+			Data:           data,
+			// Data:           data[:n],
+
 		}
+		c.logger.Infof("Command data from %d is %v", cmd.GetSequenceNumber(), cmd.GetData())
 
 		ctx, cancel := context.WithTimeout(ctx, c.timeout)
 		promise := c.gorumsConfig.ExecCommand(ctx, cmd)
@@ -282,7 +290,7 @@ func (c *Client) handleCommands(ctx context.Context) (executed, failed, timeout 
 		case <-ctx.Done():
 			return
 		}
-		_, err := cmd.promise.Get()
+		response, err := cmd.promise.Get()
 		if err != nil {
 			qcError, ok := err.(gorums.QuorumCallError)
 			if ok && qcError.Reason == context.DeadlineExceeded.Error() {
@@ -294,6 +302,7 @@ func (c *Client) handleCommands(ctx context.Context) (executed, failed, timeout 
 			}
 		} else {
 			executed++
+			c.logger.Infof("Received data from %v is %v", cmd.sequenceNumber, response)
 		}
 		c.mut.Lock()
 		if cmd.sequenceNumber > c.highestCommitted {
