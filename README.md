@@ -1,3 +1,9 @@
+# RB-HotStuff
+
+`make`
+`./hotstuff run`
+
+
 # hotstuff
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/relab/consensus.svg)](https://pkg.go.dev/github.com/relab/hotstuff)
