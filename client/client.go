@@ -232,7 +232,7 @@ loop:
 			break
 		}
 
-		randData, _ := rand.Int(rand.Reader, big.NewInt(128))
+		randData, _ := rand.Int(rand.Reader, big.NewInt(1000000))
 		// data := make([]byte, c.payloadSize)
 		data := randData.Bytes()
 		c.logger.Infof("Random data %v is %v", randData, data)
@@ -290,7 +290,7 @@ func (c *Client) handleCommands(ctx context.Context) (executed, failed, timeout 
 		case <-ctx.Done():
 			return
 		}
-		response, err := cmd.promise.Get()
+		_, err := cmd.promise.Get()
 		if err != nil {
 			qcError, ok := err.(gorums.QuorumCallError)
 			if ok && qcError.Reason == context.DeadlineExceeded.Error() {
@@ -302,7 +302,6 @@ func (c *Client) handleCommands(ctx context.Context) (executed, failed, timeout 
 			}
 		} else {
 			executed++
-			c.logger.Infof("Received data from %v is %v", cmd.sequenceNumber, response)
 		}
 		c.mut.Lock()
 		if cmd.sequenceNumber > c.highestCommitted {

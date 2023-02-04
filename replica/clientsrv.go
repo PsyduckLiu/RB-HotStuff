@@ -99,6 +99,8 @@ func (srv *clientSrv) Exec(cmd hotstuff.Command) {
 	srv.eventLoop.AddEvent(hotstuff.CommitEvent{Commands: len(batch.GetCommands())})
 
 	for _, cmd := range batch.GetCommands() {
+		srv.logger.Infof("Unmarshalled Command is %v", cmd.Data)
+
 		_, _ = srv.hash.Write(cmd.Data)
 		srv.mut.Lock()
 		id := cmdID{cmd.GetClientID(), cmd.GetSequenceNumber()}
