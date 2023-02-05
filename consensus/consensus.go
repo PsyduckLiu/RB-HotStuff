@@ -266,7 +266,15 @@ func (cs *consensusBase) commit(block *hotstuff.Block) {
 		return
 	}
 
-	if block.View() != 0 {
+	leaderID := cs.leaderRotation.GetLeader(cs.lastVote + 1)
+	// cs.logger.Infof("Leader is %v", leaderID)
+	// cs.logger.Infof("Replica is %v", cs.opts.ID())
+	// if leaderID == cs.opts.ID() {
+	// 	cs.logger.Infof("Command in new block is %v", []byte(block.Command()))
+	// 	cs.eventLoop.AddEvent(hotstuff.OutputEvent{Output: })
+	// }
+
+	if leaderID == cs.opts.ID() && block.View() != 0 {
 		cs.logger.Infof("New Block is %v", block)
 		cs.logger.Infof("Hash in new block is %v", block.Hash())
 		cs.logger.Infof("Command in new block is %v", []byte(block.Command()))

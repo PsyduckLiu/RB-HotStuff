@@ -34,7 +34,7 @@ type Acceptor interface {
 // Executor is responsible for executing the commands that are committed by the consensus protocol.
 type Executor interface {
 	// Exec executes the command.
-	Exec(cmd hotstuff.Command)
+	Exec(cmd hotstuff.Command, id hotstuff.ID)
 }
 
 // ExecutorExt is responsible for executing the commands that are committed by the consensus protocol.
@@ -188,7 +188,7 @@ func (ew executorWrapper) InitModule(mods *Core) {
 }
 
 func (ew executorWrapper) Exec(block *hotstuff.Block) {
-	ew.executor.Exec(block.Command())
+	ew.executor.Exec(block.Command(), block.Proposer())
 }
 
 // ExtendedForkHandler turns the given ForkHandler into a ForkHandlerExt.

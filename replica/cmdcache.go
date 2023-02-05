@@ -105,7 +105,7 @@ awaitBatch:
 		return "", false
 	}
 
-	c.logger.Infof("Marshalled command is %v", b)
+	// c.logger.Infof("Marshalled command is %v", b)
 	cmd = hotstuff.Command(b)
 	return cmd, true
 }

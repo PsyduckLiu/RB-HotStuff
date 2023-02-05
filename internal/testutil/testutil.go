@@ -35,7 +35,7 @@ func TestModules(t *testing.T, ctrl *gomock.Controller, id hotstuff.ID, privkey 
 	acceptor.EXPECT().Proposed(gomock.Any()).AnyTimes()
 
 	executor := mocks.NewMockExecutor(ctrl)
-	executor.EXPECT().Exec(gomock.AssignableToTypeOf(hotstuff.Command(""))).AnyTimes()
+	executor.EXPECT().Exec(gomock.AssignableToTypeOf(hotstuff.Command("")), gomock.AssignableToTypeOf(hotstuff.ID(1))).AnyTimes()
 
 	forkHandler := mocks.NewMockForkHandler(ctrl)
 

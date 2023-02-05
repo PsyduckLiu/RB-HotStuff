@@ -68,6 +68,6 @@ func (t *Throughput) tick(tick types.TickEvent) {
 	}
 	t.metricsLogger.Log(event)
 	// reset count for next tick
-	t.commandCount = 0
-	t.commitCount = 0
+	// t.commandCount = 0
+	// t.commitCount = 0
 }

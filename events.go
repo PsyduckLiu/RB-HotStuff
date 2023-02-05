@@ -63,3 +63,10 @@ type NewViewMsg struct {
 type CommitEvent struct {
 	Commands int
 }
+
+// OutputEvent is raised whenever a block is committed,
+// and includes the result of client commands that were executed.
+type OutputEvent struct {
+	Id     ID
+	Output string
+}

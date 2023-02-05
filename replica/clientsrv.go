@@ -88,7 +88,7 @@ func (srv *clientSrv) ExecCommand(ctx gorums.ServerCtx, cmd *clientpb.Command) (
 	return &emptypb.Empty{}, err
 }
 
-func (srv *clientSrv) Exec(cmd hotstuff.Command) {
+func (srv *clientSrv) Exec(cmd hotstuff.Command, id hotstuff.ID) {
 	batch := new(clientpb.Batch)
 	err := proto.UnmarshalOptions{AllowPartial: true}.Unmarshal([]byte(cmd), batch)
 	if err != nil {
@@ -96,10 +96,11 @@ func (srv *clientSrv) Exec(cmd hotstuff.Command) {
 		return
 	}
 
+	srv.eventLoop.AddEvent(hotstuff.OutputEvent{Id: id, Output: string(batch.GetCommands()[0].Data)})
 	srv.eventLoop.AddEvent(hotstuff.CommitEvent{Commands: len(batch.GetCommands())})
 
 	for _, cmd := range batch.GetCommands() {
-		srv.logger.Infof("Unmarshalled Command is %v", cmd.Data)
+		// srv.logger.Infof("Unmarshalled Command is %v", cmd.Data)
 
 		_, _ = srv.hash.Write(cmd.Data)
 		srv.mut.Lock()
@@ -112,6 +113,8 @@ func (srv *clientSrv) Exec(cmd hotstuff.Command) {
 	}
 
 	srv.logger.Debugf("Hash: %.8x", srv.hash.Sum(nil))
+
+	// return string(batch.GetCommands()[0].Data)
 }
 
 func (srv *clientSrv) Fork(cmd hotstuff.Command) {
