@@ -8,9 +8,17 @@ import "sync"
 
 var (
 	registryMut    sync.Mutex
+	sourcerMetrics = map[string]func() any{}
 	clientMetrics  = map[string]func() any{}
 	replicaMetrics = map[string]func() any{}
 )
+
+// RegisterSourcerMetric registers the constructor of a sourcer metric.
+func RegisterSourcerMetric(name string, constructor func() any) {
+	registryMut.Lock()
+	defer registryMut.Unlock()
+	sourcerMetrics[name] = constructor
+}
 
 // RegisterClientMetric registers the constructor of a client metric.
 func RegisterClientMetric(name string, constructor func() any) {
@@ -24,6 +32,19 @@ func RegisterReplicaMetric(name string, constructor func() any) {
 	registryMut.Lock()
 	defer registryMut.Unlock()
 	replicaMetrics[name] = constructor
+}
+
+// GetSourcerMetrics constructs a new instance of each named metric.
+func GetSourcerMetrics(names ...string) (metrics []any) {
+	registryMut.Lock()
+	defer registryMut.Unlock()
+
+	for _, name := range names {
+		if constructor, ok := sourcerMetrics[name]; ok {
+			metrics = append(metrics, constructor())
+		}
+	}
+	return
 }
 
 // GetClientMetrics constructs a new instance of each named metric.

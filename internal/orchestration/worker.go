@@ -27,6 +27,7 @@ import (
 	"github.com/relab/hotstuff/metrics/types"
 	"github.com/relab/hotstuff/modules"
 	"github.com/relab/hotstuff/replica"
+	"github.com/relab/hotstuff/sourcer"
 	"github.com/relab/hotstuff/synchronizer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -54,6 +55,7 @@ type Worker struct {
 
 	replicas map[hotstuff.ID]*replica.Replica
 	clients  map[hotstuff.ID]*client.Client
+	sourcers map[hotstuff.ID]*sourcer.Sourcer
 }
 
 // Run runs the worker until it receives a command to quit.
@@ -76,6 +78,10 @@ func (w *Worker) Run() error {
 			res, err = w.startClients(req)
 		case *orchestrationpb.StopClientRequest:
 			res, err = w.stopClients(req)
+		case *orchestrationpb.StartSourcerRequest:
+			res, err = w.startSourcers(req)
+		case *orchestrationpb.StopSourcerRequest:
+			res, err = w.stopSourcers(req)
 		case *orchestrationpb.QuitRequest:
 			return nil
 		}
@@ -102,6 +108,7 @@ func NewWorker(send *protostream.Writer, recv *protostream.Reader, dl metrics.Lo
 		measurementInterval: measurementInterval,
 		replicas:            make(map[hotstuff.ID]*replica.Replica),
 		clients:             make(map[hotstuff.ID]*client.Client),
+		sourcers:            make(map[hotstuff.ID]*sourcer.Sourcer),
 	}
 }
 
@@ -130,8 +137,16 @@ func (w *Worker) createReplicas(req *orchestrationpb.CreateReplicaRequest) (*orc
 		if err != nil {
 			return nil, err
 		}
+		sourcerListener, err := net.Listen("tcp", ":0")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create listener: %w", err)
+		}
+		sourcerPort, err := getPort(sourcerListener)
+		if err != nil {
+			return nil, err
+		}
 
-		r.StartServers(replicaListener, clientListener)
+		r.StartServers(replicaListener, clientListener, sourcerListener)
 		w.replicas[hotstuff.ID(cfg.GetID())] = r
 
 		resp.Replicas[cfg.GetID()] = &orchestrationpb.ReplicaInfo{
@@ -139,6 +154,7 @@ func (w *Worker) createReplicas(req *orchestrationpb.CreateReplicaRequest) (*orc
 			PublicKey:   cfg.GetPublicKey(),
 			ReplicaPort: replicaPort,
 			ClientPort:  clientPort,
+			SourcerPort: sourcerPort,
 		}
 	}
 	return resp, nil
@@ -245,7 +261,7 @@ func (w *Worker) startReplicas(req *orchestrationpb.StartReplicaRequest) (*orche
 		if !ok {
 			return nil, status.Errorf(codes.NotFound, "The replica with ID %d was not found.", id)
 		}
-		cfg, err := getConfiguration(req.GetConfiguration(), false)
+		cfg, err := getConfiguration(req.GetConfiguration(), 1)
 		if err != nil {
 			return nil, err
 		}
@@ -312,7 +328,7 @@ func (w *Worker) startClients(req *orchestrationpb.StartClientRequest) (*orchest
 		mods.Add(w.metricsLogger)
 		mods.Add(logging.New("cli" + strconv.Itoa(int(opts.GetID()))))
 		cli := client.New(c, mods)
-		cfg, err := getConfiguration(req.GetConfiguration(), true)
+		cfg, err := getConfiguration(req.GetConfiguration(), 0)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +354,60 @@ func (w *Worker) stopClients(req *orchestrationpb.StopClientRequest) (*orchestra
 	return &orchestrationpb.StopClientResponse{}, nil
 }
 
-func getConfiguration(conf map[uint32]*orchestrationpb.ReplicaInfo, client bool) ([]backend.ReplicaInfo, error) {
+func (w *Worker) startSourcers(req *orchestrationpb.StartSourcerRequest) (*orchestrationpb.StartSourcerResponse, error) {
+	for _, opts := range req.GetSourcers() {
+		w.metricsLogger.Log(opts)
+
+		s := sourcer.Config{
+			Input: io.NopCloser(rand.Reader),
+			ManagerOptions: []gorums.ManagerOption{
+				gorums.WithDialTimeout(opts.GetConnectTimeout().AsDuration()),
+				gorums.WithGrpcDialOptions(grpc.WithReturnConnectionError()),
+			},
+			Timeout: opts.GetTimeout().AsDuration(),
+		}
+		mods := modules.NewBuilder(hotstuff.ID(opts.GetID()), nil)
+		mods.Add(eventloop.New(1000))
+
+		if w.measurementInterval > 0 {
+			sourcerMetrics := metrics.GetSourcerMetrics(w.metrics...)
+			mods.Add(sourcerMetrics...)
+			mods.Add(metrics.NewTicker(w.measurementInterval))
+		}
+
+		mods.Add(w.metricsLogger)
+		mods.Add(logging.New("Sourcer" + strconv.Itoa(int(opts.GetID()))))
+		sour := sourcer.New(s, mods)
+		cfg, err := getConfiguration(req.GetConfiguration(), 2)
+		fmt.Println(cfg)
+		if err != nil {
+			fmt.Println("384")
+			return nil, err
+		}
+		err = sour.Connect(cfg)
+		if err != nil {
+			fmt.Println("389")
+			return nil, err
+		}
+		sour.Start()
+		w.metricsLogger.Log(&types.StartEvent{Event: types.NewSourcerEvent(opts.GetID(), time.Now())})
+		w.sourcers[hotstuff.ID(opts.GetID())] = sour
+	}
+	return &orchestrationpb.StartSourcerResponse{}, nil
+}
+
+func (w *Worker) stopSourcers(req *orchestrationpb.StopSourcerRequest) (*orchestrationpb.StopSourcerResponse, error) {
+	for _, id := range req.GetIDs() {
+		sour, ok := w.sourcers[hotstuff.ID(id)]
+		if !ok {
+			return nil, status.Errorf(codes.NotFound, "the sourcer with ID %d was not found", id)
+		}
+		sour.Stop()
+	}
+	return &orchestrationpb.StopSourcerResponse{}, nil
+}
+
+func getConfiguration(conf map[uint32]*orchestrationpb.ReplicaInfo, nodeType int) ([]backend.ReplicaInfo, error) {
 	replicas := make([]backend.ReplicaInfo, 0, len(conf))
 	for _, replica := range conf {
 		pubKey, err := keygen.ParsePublicKey(replica.GetPublicKey())
@@ -346,11 +415,17 @@ func getConfiguration(conf map[uint32]*orchestrationpb.ReplicaInfo, client bool)
 			return nil, err
 		}
 		var addr string
-		if client {
+
+		if nodeType == 0 {
 			addr = net.JoinHostPort(replica.GetAddress(), strconv.Itoa(int(replica.GetClientPort())))
-		} else {
+		}
+		if nodeType == 1 {
 			addr = net.JoinHostPort(replica.GetAddress(), strconv.Itoa(int(replica.GetReplicaPort())))
 		}
+		if nodeType == 2 {
+			addr = net.JoinHostPort(replica.GetAddress(), strconv.Itoa(int(replica.GetSourcerPort())))
+		}
+
 		replicas = append(replicas, backend.ReplicaInfo{
 			ID:      hotstuff.ID(replica.GetID()),
 			Address: addr,

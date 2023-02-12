@@ -47,6 +47,7 @@ func init() {
 
 	runCmd.Flags().Int("replicas", 4, "number of replicas to run")
 	runCmd.Flags().Int("clients", 1, "number of clients to run")
+	runCmd.Flags().Int("sourcers", 10, "number of replicas to run")
 	runCmd.Flags().Int("batch-size", 1, "number of commands to batch together in each block")
 	runCmd.Flags().Int("payload-size", 0, "size in bytes of the command payload")
 	runCmd.Flags().Int("max-concurrent", 4, "maximum number of conccurrent commands per client")
@@ -101,6 +102,7 @@ func runController() {
 		Logger:      logging.New("ctrl"),
 		NumReplicas: viper.GetInt("replicas"),
 		NumClients:  viper.GetInt("clients"),
+		NumSourcers: viper.GetInt("sourcers"),
 		Duration:    viper.GetDuration("duration"),
 		Output:      outputDir,
 		ReplicaOpts: &orchestrationpb.ReplicaOpts{
@@ -126,6 +128,10 @@ func runController() {
 			RateStep:         viper.GetFloat64("rate-step"),
 			RateStepInterval: durationpb.New(viper.GetDuration("rate-step-interval")),
 			Timeout:          durationpb.New(viper.GetDuration("client-timeout")),
+		},
+		SourcerOpts: &orchestrationpb.SourcerOpts{
+			ConnectTimeout: durationpb.New(viper.GetDuration("connect-timeout")),
+			Timeout:        durationpb.New(viper.GetDuration("client-timeout")),
 		},
 	}
 

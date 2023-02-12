@@ -21,11 +21,11 @@ message ReplicaOpts {
   // Determines whether TLS should be used.
   bool UseTLS = 4;
   // The replica's TLS certificate.
-  optional bytes Certificate = 5;
+  bytes Certificate = 5;
   // The private key of the TLS certificate.
-  optional bytes CertificateKey = 6;
+  bytes CertificateKey = 6;
   // The certificate authority that created the TLS certificates.
-  optional bytes CertificateAuthority = 7;
+  bytes CertificateAuthority = 7;
   // The name of the crypto implementation to use.
   string Crypto = 8;
   // The name of the consensus implementation to use.
@@ -65,6 +65,8 @@ message ReplicaInfo {
   uint32 ReplicaPort = 4;
   // The port that clients should connect to.
   uint32 ClientPort = 5;
+  // The port that sourcers should connect to.
+  uint32 SourcerPort = 6;
 }
 
 message ClientOpts {
@@ -84,6 +86,15 @@ message ClientOpts {
   double RateStep = 12;
   // How often to increase the rate limit.
   google.protobuf.Duration RateStepInterval = 13;
+  // The timeout for a command.
+  google.protobuf.Duration Timeout = 14;
+}
+
+message SourcerOpts {
+  // The sourcer's ID.
+  uint32 ID = 1;
+  // The timeout of the initial connection.
+  google.protobuf.Duration ConnectTimeout = 10;
   // The timeout for a command.
   google.protobuf.Duration Timeout = 14;
 }
@@ -124,7 +135,7 @@ message StartClientRequest {
   // The clients to create.
   map<uint32, ClientOpts> Clients = 1;
   // The certificate authority that created the TLS certificates.
-  optional bytes CertificateAuthority = 7;
+  bytes CertificateAuthority = 7;
   // The replicas to connect to.
   map<uint32, ReplicaInfo> Configuration = 10;
 }
@@ -136,6 +147,23 @@ message StartClientResponse {}
 message StopClientRequest { repeated uint32 IDs = 1; }
 
 message StopClientResponse {}
+
+/* ----------------------------- StartSourcer RPC ---------------------------- */
+
+message StartSourcerRequest {
+  // The sourcers to create.
+  map<uint32, SourcerOpts> Sourcers = 1;
+  // The replicas to connect to.
+  map<uint32, ReplicaInfo> Configuration = 10;
+}
+
+message StartSourcerResponse {}
+
+/* ----------------------------- StopSourcer RPC ----------------------------- */
+
+message StopSourcerRequest { repeated uint32 IDs = 1; }
+
+message StopSourcerResponse {}
 
 /* -------------------------------- Quit RPC -------------------------------- */
 

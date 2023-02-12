@@ -18,6 +18,16 @@ type CommandQueue interface {
 	Get(ctx context.Context) (cmd hotstuff.Command, ok bool)
 }
 
+//go:generate mockgen -destination=../internal/mocks/tcqueue_mock.go -package=mocks . TCQueue
+
+// TCQueue is a queue of TCs to be proposed.
+type TCQueue interface {
+	// Get returns the next TC set to be proposed.
+	// It may run until the context is cancelled.
+	// If no command is available, the 'ok' return value should be false.
+	GetTC(ctx context.Context) (tcSet hotstuff.TCSet, ok bool)
+}
+
 //go:generate mockgen -destination=../internal/mocks/acceptor_mock.go -package=mocks . Acceptor
 
 // Acceptor decides if a replica should accept a command.

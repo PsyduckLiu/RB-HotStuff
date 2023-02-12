@@ -131,10 +131,12 @@ func (c *Client) Connect(replicas []backend.ReplicaInfo) (err error) {
 	nodes := make(map[string]uint32, len(replicas))
 	for _, r := range replicas {
 		nodes[r.Address] = uint32(r.ID)
+		c.logger.Infof(r.Address)
 	}
 	c.gorumsConfig, err = c.mgr.NewConfiguration(&qspec{faulty: hotstuff.NumFaulty(len(replicas))}, gorums.WithNodeMap(nodes))
 	if err != nil {
 		c.mgr.Close()
+		c.logger.Infof(err.Error())
 		return err
 	}
 	return nil
@@ -233,9 +235,10 @@ loop:
 		}
 
 		randData, _ := rand.Int(rand.Reader, big.NewInt(1000000))
-		// data := make([]byte, c.payloadSize)
 		data := randData.Bytes()
 		c.logger.Infof("Random data %v is %v", randData, data)
+
+		// data := make([]byte, c.payloadSize)
 		// n, err := c.reader.Read(data)
 		// if err != nil && err != io.EOF {
 		// 	// if we get an error other than EOF
@@ -254,13 +257,13 @@ loop:
 		}
 		c.logger.Infof("Command data from %d is %v", cmd.GetSequenceNumber(), cmd.GetData())
 
-		ctx, cancel := context.WithTimeout(ctx, c.timeout)
-		promise := c.gorumsConfig.ExecCommand(ctx, cmd)
-		pending := pendingCmd{sequenceNumber: num, sendTime: time.Now(), promise: promise, cancelCtx: cancel}
+		// ctx, cancel := context.WithTimeout(ctx, c.timeout)
+		// promise := c.gorumsConfig.ExecCommand(ctx, cmd)
+		// pending := pendingCmd{sequenceNumber: num, sendTime: time.Now(), promise: promise, cancelCtx: cancel}
 
 		num++
 		select {
-		case c.pendingCmds <- pending:
+		// case c.pendingCmds <- pending:
 		case <-ctx.Done():
 			break loop
 		}

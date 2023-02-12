@@ -22,6 +22,7 @@ import (
 // HostConfig specifies the number of replicas and clients that should be started on a specific host.
 type HostConfig struct {
 	Name            string
+	Sourcers        int
 	Clients         int
 	Replicas        int
 	InternalAddress string `mapstructure:"internal-address"`
@@ -31,11 +32,13 @@ type HostConfig struct {
 type Experiment struct {
 	*orchestrationpb.ReplicaOpts
 	*orchestrationpb.ClientOpts
+	*orchestrationpb.SourcerOpts
 
 	Logger logging.Logger
 
 	NumReplicas int
 	NumClients  int
+	NumSourcers int
 	Duration    time.Duration
 
 	Hosts       map[string]RemoteWorker
@@ -47,9 +50,11 @@ type Experiment struct {
 	hostsToReplicas map[string][]hotstuff.ID
 	// the host associated with each client.
 	hostsToClients map[string][]hotstuff.ID
-	replicaOpts    map[hotstuff.ID]*orchestrationpb.ReplicaOpts
-	caKey          *ecdsa.PrivateKey
-	ca             *x509.Certificate
+	// the host associated with each sourcer.
+	hostsToSourcers map[string][]hotstuff.ID
+	replicaOpts     map[hotstuff.ID]*orchestrationpb.ReplicaOpts
+	caKey           *ecdsa.PrivateKey
+	ca              *x509.Certificate
 }
 
 // Run runs the experiment.
@@ -79,6 +84,8 @@ func (e *Experiment) Run() (err error) {
 		return fmt.Errorf("failed to create replicas: %w", err)
 	}
 
+	e.Logger.Info(cfg)
+
 	e.Logger.Info("Starting replicas...")
 	err = e.startReplicas(cfg)
 	if err != nil {
@@ -89,9 +96,22 @@ func (e *Experiment) Run() (err error) {
 	err = e.startClients(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to start clients: %w", err)
+
+	}
+
+	e.Logger.Info("Starting sourcers...")
+	err = e.startSourcers(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to start sourcers: %w", err)
 	}
 
 	time.Sleep(e.Duration)
+
+	e.Logger.Info("Stopping sourcers...")
+	err = e.stopSourcers()
+	if err != nil {
+		return fmt.Errorf("failed to stop sourcers: %w", err)
+	}
 
 	e.Logger.Info("Stopping clients...")
 	err = e.stopClients()
@@ -128,6 +148,7 @@ func (e *Experiment) createReplicas() (cfg *orchestrationpb.ReplicaConfiguration
 		for _, id := range e.hostsToReplicas[host] {
 			opts := e.replicaOpts[id]
 			opts.CertificateAuthority = keygen.CertToPEM(e.ca)
+			e.Logger.Infof(string(opts.CertificateAuthority))
 
 			// the generated certificate should be valid for the hostname and its ip addresses.
 			validFor := []string{"localhost", "127.0.0.1", host}
@@ -167,7 +188,8 @@ func (e *Experiment) createReplicas() (cfg *orchestrationpb.ReplicaConfiguration
 			} else {
 				replicaCfg.Address = host
 			}
-			e.Logger.Debugf("Address for replica %d: %s", id, replicaCfg.Address)
+			// e.Logger.Debugf("Address for replica %d: %s", id, replicaCfg.Address)
+			e.Logger.Infof("Address for replica %d: %s", id, replicaCfg.Address)
 			cfg.Replicas[id] = replicaCfg
 		}
 	}
@@ -181,13 +203,16 @@ func (e *Experiment) assignReplicasAndClients() (err error) {
 	e.hostsToReplicas = make(map[string][]hotstuff.ID)
 	e.replicaOpts = make(map[hotstuff.ID]*orchestrationpb.ReplicaOpts)
 	e.hostsToClients = make(map[string][]hotstuff.ID)
+	e.hostsToSourcers = make(map[string][]hotstuff.ID)
 
 	nextReplicaID := hotstuff.ID(1)
 	nextClientID := hotstuff.ID(1)
+	nextSourcerID := hotstuff.ID(1)
 
 	// number of replicas that should be auto assigned
 	remainingReplicas := e.NumReplicas
 	remainingClients := e.NumClients
+	remainingSourcers := e.NumSourcers
 
 	// how many workers that should be auto assigned
 	autoConfig := len(e.Hosts)
@@ -195,12 +220,13 @@ func (e *Experiment) assignReplicasAndClients() (err error) {
 	// determine how many replicas should be assigned automatically
 	for _, hostCfg := range e.HostConfigs {
 		// TODO: ensure that this host is part of e.Hosts
-		if hostCfg.Clients|hostCfg.Replicas == 0 {
+		if hostCfg.Clients|hostCfg.Replicas|hostCfg.Sourcers == 0 {
 			// if both are zero, we'll autoconfigure this host.
 			continue
 		}
 		remainingReplicas -= hostCfg.Replicas
 		remainingClients -= hostCfg.Clients
+		remainingClients -= hostCfg.Sourcers
 		autoConfig--
 	}
 
@@ -209,6 +235,8 @@ func (e *Experiment) assignReplicasAndClients() (err error) {
 		remainderReplicas int
 		clientsPerNode    int
 		remainderClients  int
+		sourcersPerNode   int
+		remainderSourcers int
 	)
 
 	if autoConfig > 0 {
@@ -216,6 +244,8 @@ func (e *Experiment) assignReplicasAndClients() (err error) {
 		remainderReplicas = remainingReplicas % autoConfig
 		clientsPerNode = remainingClients / autoConfig
 		remainderClients = remainingClients % autoConfig
+		sourcersPerNode = remainingSourcers / autoConfig
+		remainderSourcers = remainingSourcers % autoConfig
 	}
 
 	// ensure that we have not assigned more replicas or clients than requested
@@ -231,15 +261,23 @@ func (e *Experiment) assignReplicasAndClients() (err error) {
 			e.NumClients, e.NumClients-remainingClients,
 		)
 	}
+	if remainingSourcers < 0 {
+		return fmt.Errorf(
+			"invalid sourcer configuration: %d sourcers requested, but host configuration specifies %d",
+			e.NumSourcers, e.NumSourcers-remainingSourcers,
+		)
+	}
 
 	for host := range e.Hosts {
 		var (
 			numReplicas int
 			numClients  int
+			numSourcers int
 		)
-		if hostCfg, ok := e.HostConfigs[host]; ok && hostCfg.Clients|hostCfg.Replicas != 0 {
+		if hostCfg, ok := e.HostConfigs[host]; ok && hostCfg.Clients|hostCfg.Replicas|hostCfg.Sourcers != 0 {
 			numReplicas = hostCfg.Replicas
 			numClients = hostCfg.Clients
+			numSourcers = hostCfg.Sourcers
 		} else {
 			numReplicas = replicasPerNode
 			remainingReplicas -= replicasPerNode
@@ -254,6 +292,13 @@ func (e *Experiment) assignReplicasAndClients() (err error) {
 				numClients++
 				remainderClients--
 				remainingClients--
+			}
+			numSourcers = sourcersPerNode
+			remainingSourcers -= sourcersPerNode
+			if remainderSourcers > 0 {
+				numSourcers++
+				remainderSourcers--
+				remainingSourcers--
 			}
 		}
 
@@ -282,6 +327,12 @@ func (e *Experiment) assignReplicasAndClients() (err error) {
 			e.Logger.Infof("client %d assigned to host %s", nextClientID, host)
 			nextClientID++
 		}
+
+		for i := 0; i < numSourcers; i++ {
+			e.hostsToSourcers[host] = append(e.hostsToSourcers[host], nextSourcerID)
+			e.Logger.Infof("sourcer %d assigned to host %s", nextSourcerID, host)
+			nextSourcerID++
+		}
 	}
 
 	// TODO: warn if not all clients/replicas were assigned
@@ -293,6 +344,8 @@ type assignmentsFileContents struct {
 	HostsToReplicas map[string][]hotstuff.ID
 	// the host associated with each client.
 	HostsToClients map[string][]hotstuff.ID
+	// the host associated with each sourcer.
+	HostsToSourcers map[string][]hotstuff.ID
 }
 
 func (e *Experiment) writeAssignmentsFile() (err error) {
@@ -310,6 +363,7 @@ func (e *Experiment) writeAssignmentsFile() (err error) {
 	return enc.Encode(assignmentsFileContents{
 		HostsToReplicas: e.hostsToReplicas,
 		HostsToClients:  e.hostsToClients,
+		HostsToSourcers: e.hostsToSourcers,
 	})
 }
 
@@ -361,7 +415,9 @@ func (e *Experiment) startClients(cfg *orchestrationpb.ReplicaConfiguration) err
 		req.Clients = make(map[uint32]*orchestrationpb.ClientOpts)
 		req.Configuration = cfg.GetReplicas()
 		req.CertificateAuthority = keygen.CertToPEM(e.ca)
+		e.Logger.Infof(string(req.CertificateAuthority))
 		for _, id := range e.hostsToClients[host] {
+			e.Logger.Info(id)
 			clientOpts := proto.Clone(e.ClientOpts).(*orchestrationpb.ClientOpts)
 			clientOpts.ID = uint32(id)
 			req.Clients[uint32(id)] = clientOpts
@@ -379,6 +435,37 @@ func (e *Experiment) stopClients() error {
 		req := &orchestrationpb.StopClientRequest{}
 		req.IDs = getIDs(host, e.hostsToClients)
 		_, err := worker.StopClient(req)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *Experiment) startSourcers(cfg *orchestrationpb.ReplicaConfiguration) error {
+	for host, worker := range e.Hosts {
+		req := &orchestrationpb.StartSourcerRequest{}
+		req.Sourcers = make(map[uint32]*orchestrationpb.SourcerOpts)
+		req.Configuration = cfg.GetReplicas()
+		for _, id := range e.hostsToSourcers[host] {
+			sourcerOpts := proto.Clone(e.SourcerOpts).(*orchestrationpb.SourcerOpts)
+			sourcerOpts.ID = uint32(id)
+			req.Sourcers[uint32(id)] = sourcerOpts
+		}
+		e.Logger.Infof(req.String())
+		_, err := worker.StartSourcer(req)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *Experiment) stopSourcers() error {
+	for host, worker := range e.Hosts {
+		req := &orchestrationpb.StopSourcerRequest{}
+		req.IDs = getIDs(host, e.hostsToSourcers)
+		_, err := worker.StopSourcer(req)
 		if err != nil {
 			return err
 		}

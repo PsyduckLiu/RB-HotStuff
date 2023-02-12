@@ -103,6 +103,8 @@ func (h Hash) String() string {
 // The string type is used because it is immutable and can hold arbitrary bytes of any length.
 type Command string
 
+type TCSet map[int][]byte
+
 // ToBytes is an object that can be converted into bytes for the purposes of hashing, etc.
 type ToBytes interface {
 	// ToBytes returns the object as bytes.

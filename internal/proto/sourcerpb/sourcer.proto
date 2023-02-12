@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package sourcerpb;
+
+import "gorums.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/relab/hotstuff/internal/proto/sourcerpb";
+
+// Sourcer is the sourcer-facing API to HotStuff
+service Sourcer {
+  // CollectTC sends a timed commitment to all replicas
+  rpc CollectTC(TC) returns (google.protobuf.Empty) {
+    option (gorums.quorumcall) = true;
+    option (gorums.async) = true;
+  }
+}
+
+// TC is the request that is sent to the HotStuff replicas with the data to
+// be executed.
+message TC {
+  uint32 SourcerID = 1;
+  uint64 SequenceNumber = 2;
+  bytes TimedCommitment = 3;
+}

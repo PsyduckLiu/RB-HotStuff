@@ -35,6 +35,8 @@ func (w RemoteWorker) rpc(req proto.Message) (res proto.Message, err error) {
 	}
 	// unpack status errors
 	if s, ok := res.(*spb.Status); ok {
+		fmt.Println("remoteworker38")
+		fmt.Println(status.FromProto(s).Err())
 		return nil, status.FromProto(s).Err()
 	}
 	return res, nil
@@ -84,6 +86,7 @@ func (w RemoteWorker) StopReplica(req *orchestrationpb.StopReplicaRequest) (res 
 func (w RemoteWorker) StartClient(req *orchestrationpb.StartClientRequest) (res *orchestrationpb.StartClientResponse, err error) {
 	msg, err := w.rpc(req)
 	if err != nil {
+		fmt.Println("lalala")
 		return nil, err
 	}
 	res, ok := msg.(*orchestrationpb.StartClientResponse)
@@ -100,6 +103,32 @@ func (w RemoteWorker) StopClient(req *orchestrationpb.StopClientRequest) (res *o
 		return nil, err
 	}
 	res, ok := msg.(*orchestrationpb.StopClientResponse)
+	if !ok {
+		return nil, fmt.Errorf("wrong type for response message: got %T, wanted: %T", msg, res)
+	}
+	return res, nil
+}
+
+// StartSourcer requests that the remote worker starts the specified sourcers.
+func (w RemoteWorker) StartSourcer(req *orchestrationpb.StartSourcerRequest) (res *orchestrationpb.StartSourcerResponse, err error) {
+	msg, err := w.rpc(req)
+	if err != nil {
+		return nil, err
+	}
+	res, ok := msg.(*orchestrationpb.StartSourcerResponse)
+	if !ok {
+		return nil, fmt.Errorf("wrong type for response message: got %T, wanted: %T", msg, res)
+	}
+	return res, nil
+}
+
+// StopSourcer requests that the remote worker stops the specified sourcers.
+func (w RemoteWorker) StopSourcer(req *orchestrationpb.StopSourcerRequest) (res *orchestrationpb.StopSourcerResponse, err error) {
+	msg, err := w.rpc(req)
+	if err != nil {
+		return nil, err
+	}
+	res, ok := msg.(*orchestrationpb.StopSourcerResponse)
 	if !ok {
 		return nil, fmt.Errorf("wrong type for response message: got %T, wanted: %T", msg, res)
 	}

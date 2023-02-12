@@ -24,6 +24,11 @@ func NewClientEvent(id uint32, timestamp time.Time) *Event {
 	return newEvent(true, id, timestamp)
 }
 
+// NewSourcerEvent creates a new sourcer event.
+func NewSourcerEvent(id uint32, timestamp time.Time) *Event {
+	return newEvent(false, id, timestamp)
+}
+
 // TickEvent is sent when new measurements should be recorded.
 type TickEvent struct {
 	// The time when the previous tick happened.

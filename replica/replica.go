@@ -18,6 +18,12 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// tcID is a unique identifier for a TC
+type tcID struct {
+	sourcerID   uint32
+	sequenceNum uint64
+}
+
 // cmdID is a unique identifier for a command
 type cmdID struct {
 	clientID    uint32
@@ -38,6 +44,8 @@ type Config struct {
 	RootCAs *x509.CertPool
 	// The number of client commands that should be batched together in a block.
 	BatchSize uint32
+	// Options for the sourcer server.
+	SourcerServerOptions []gorums.ServerOption
 	// Options for the client server.
 	ClientServerOptions []gorums.ServerOption
 	// Options for the replica server.
@@ -48,10 +56,11 @@ type Config struct {
 
 // Replica is a participant in the consensus protocol.
 type Replica struct {
-	clientSrv *clientSrv
-	cfg       *backend.Config
-	hsSrv     *backend.Server
-	hs        *modules.Core
+	sourcerSrv *sourcerSrv
+	clientSrv  *clientSrv
+	cfg        *backend.Config
+	hsSrv      *backend.Server
+	hs         *modules.Core
 
 	execHandlers map[cmdID]func(*emptypb.Empty, error)
 	cancel       context.CancelFunc
@@ -70,7 +79,11 @@ func New(conf Config, builder modules.Builder) (replica *Replica) {
 
 	clientSrv := newClientServer(conf, clientSrvOpts)
 
+	sourcerSrvOpts := conf.SourcerServerOptions
+	sourcerSrv := newSourcerServer(conf, sourcerSrvOpts)
+
 	srv := &Replica{
+		sourcerSrv:   sourcerSrv,
 		clientSrv:    clientSrv,
 		execHandlers: make(map[cmdID]func(*emptypb.Empty, error)),
 		cancel:       func() {},
@@ -108,6 +121,9 @@ func New(conf Config, builder modules.Builder) (replica *Replica) {
 		modules.ExtendedForkHandler(srv.clientSrv),
 		srv.clientSrv.cmdCache,
 		srv.clientSrv.cmdCache,
+
+		srv.sourcerSrv.tcCache,
+		srv.sourcerSrv.tcCache,
 	)
 	srv.hs = builder.Build()
 
@@ -120,9 +136,10 @@ func (srv *Replica) Modules() *modules.Core {
 }
 
 // StartServers starts the client and replica servers.
-func (srv *Replica) StartServers(replicaListen, clientListen net.Listener) {
+func (srv *Replica) StartServers(replicaListen, clientListen net.Listener, sourcerListen net.Listener) {
 	srv.hsSrv.StartOnListener(replicaListen)
 	srv.clientSrv.StartOnListener(clientListen)
+	srv.sourcerSrv.StartOnListener(sourcerListen)
 }
 
 // Connect connects to the other replicas.
@@ -161,6 +178,7 @@ func (srv *Replica) Run(ctx context.Context) {
 
 // Close closes the connections and stops the servers used by the replica.
 func (srv *Replica) Close() {
+	srv.sourcerSrv.Stop()
 	srv.clientSrv.Stop()
 	srv.cfg.Close()
 	srv.hsSrv.Stop()

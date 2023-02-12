@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"fmt"
+	"math/big"
 	"sync"
 
 	"github.com/relab/hotstuff"
@@ -40,6 +41,7 @@ type consensusBase struct {
 	acceptor       modules.Acceptor
 	blockChain     modules.BlockChain
 	commandQueue   modules.CommandQueue
+	TCQueue        modules.TCQueue
 	configuration  modules.Configuration
 	crypto         modules.Crypto
 	eventLoop      *eventloop.EventLoop
@@ -120,6 +122,20 @@ func (cs *consensusBase) Propose(cert hotstuff.SyncInfo) {
 		} else {
 			cs.logger.Errorf("Could not find block for QC: %s", qc)
 		}
+	}
+
+	tcSet, ok := cs.TCQueue.GetTC(cs.synchronizer.ViewContext())
+	if !ok {
+		cs.logger.Debug("Propose: No TC")
+		return
+	}
+
+	data := big.NewInt(0)
+	for i, tc := range tcSet {
+		cs.logger.Infof("Number %v is %v", i, tc)
+		var bigTC big.Int
+		bigTC.SetBytes(tc)
+		data.Xor(data, &bigTC)
 	}
 
 	cmd, ok := cs.commandQueue.Get(cs.synchronizer.ViewContext())
