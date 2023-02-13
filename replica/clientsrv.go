@@ -28,6 +28,7 @@ type clientSrv struct {
 	srv          *gorums.Server
 	awaitingCmds map[cmdID]chan<- error
 	cmdCache     *cmdCache
+	cliCache     *cliCache
 	hash         hash.Hash
 }
 
@@ -37,6 +38,7 @@ func newClientServer(conf Config, srvOpts []gorums.ServerOption) (srv *clientSrv
 		awaitingCmds: make(map[cmdID]chan<- error),
 		srv:          gorums.NewServer(srvOpts...),
 		cmdCache:     newCmdCache(int(conf.BatchSize)),
+		cliCache:     newCliCache(),
 		hash:         sha256.New(),
 	}
 	clientpb.RegisterClientServer(srv.srv, srv)
@@ -50,6 +52,7 @@ func (srv *clientSrv) InitModule(mods *modules.Core) {
 		&srv.logger,
 	)
 	srv.cmdCache.InitModule(mods)
+	srv.cliCache.InitModule(mods)
 }
 
 func (srv *clientSrv) Start(addr string) error {
@@ -72,6 +75,25 @@ func (srv *clientSrv) StartOnListener(lis net.Listener) {
 
 func (srv *clientSrv) Stop() {
 	srv.srv.Stop()
+}
+
+func (srv *clientSrv) GetCli(ctx gorums.ServerCtx, in *clientpb.CliRequest) (*clientpb.Command, error) {
+	newCmd := &clientpb.Command{}
+
+	tcSet, ok := srv.cliCache.GetTCSet()
+
+	c := make(chan error)
+
+	if !ok {
+		ctx.Release()
+		err := <-c
+		return newCmd, err
+	} else {
+		srv.logger.Infof(string(tcSet[0]))
+		ctx.Release()
+		err := <-c
+		return newCmd, err
+	}
 }
 
 func (srv *clientSrv) ExecCommand(ctx gorums.ServerCtx, cmd *clientpb.Command) (*emptypb.Empty, error) {

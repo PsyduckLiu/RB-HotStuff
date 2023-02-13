@@ -183,7 +183,7 @@ loop:
 			SequenceNumber:  num,
 			TimedCommitment: data,
 		}
-		// s.logger.Infof("TC data from %d is %v", s.opts.ID(), data)
+		s.logger.Infof("TC data from %d is %v", s.opts.ID(), data)
 
 		ctx, cancel := context.WithTimeout(ctx, s.timeout)
 		promise := s.gorumsConfig.CollectTC(ctx, tc)
@@ -196,7 +196,7 @@ loop:
 			break loop
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	return nil

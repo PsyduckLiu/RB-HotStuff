@@ -84,7 +84,7 @@ func (e *Experiment) Run() (err error) {
 		return fmt.Errorf("failed to create replicas: %w", err)
 	}
 
-	e.Logger.Info(cfg)
+	// e.Logger.Info(cfg)
 
 	e.Logger.Info("Starting replicas...")
 	err = e.startReplicas(cfg)
@@ -148,7 +148,7 @@ func (e *Experiment) createReplicas() (cfg *orchestrationpb.ReplicaConfiguration
 		for _, id := range e.hostsToReplicas[host] {
 			opts := e.replicaOpts[id]
 			opts.CertificateAuthority = keygen.CertToPEM(e.ca)
-			e.Logger.Infof(string(opts.CertificateAuthority))
+			// e.Logger.Infof(string(opts.CertificateAuthority))
 
 			// the generated certificate should be valid for the hostname and its ip addresses.
 			validFor := []string{"localhost", "127.0.0.1", host}
@@ -188,8 +188,8 @@ func (e *Experiment) createReplicas() (cfg *orchestrationpb.ReplicaConfiguration
 			} else {
 				replicaCfg.Address = host
 			}
-			// e.Logger.Debugf("Address for replica %d: %s", id, replicaCfg.Address)
-			e.Logger.Infof("Address for replica %d: %s", id, replicaCfg.Address)
+			e.Logger.Debugf("Address for replica %d: %s", id, replicaCfg.Address)
+			// e.Logger.Infof("Address for replica %d: %s", id, replicaCfg.Address)
 			cfg.Replicas[id] = replicaCfg
 		}
 	}
@@ -415,7 +415,7 @@ func (e *Experiment) startClients(cfg *orchestrationpb.ReplicaConfiguration) err
 		req.Clients = make(map[uint32]*orchestrationpb.ClientOpts)
 		req.Configuration = cfg.GetReplicas()
 		req.CertificateAuthority = keygen.CertToPEM(e.ca)
-		e.Logger.Infof(string(req.CertificateAuthority))
+		// e.Logger.Infof(string(req.CertificateAuthority))
 		for _, id := range e.hostsToClients[host] {
 			e.Logger.Info(id)
 			clientOpts := proto.Clone(e.ClientOpts).(*orchestrationpb.ClientOpts)
@@ -452,7 +452,7 @@ func (e *Experiment) startSourcers(cfg *orchestrationpb.ReplicaConfiguration) er
 			sourcerOpts.ID = uint32(id)
 			req.Sourcers[uint32(id)] = sourcerOpts
 		}
-		e.Logger.Infof(req.String())
+		// e.Logger.Infof(req.String())
 		_, err := worker.StartSourcer(req)
 		if err != nil {
 			return err

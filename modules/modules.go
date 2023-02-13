@@ -28,6 +28,13 @@ type TCQueue interface {
 	GetTC(ctx context.Context) (tcSet hotstuff.TCSet, ok bool)
 }
 
+//go:generate mockgen -destination=../internal/mocks/cliqueue_mock.go -package=mocks . CliQueue
+
+// CliQueue is a queue of TCs to be proposed.
+type CliQueue interface {
+	AddTCSet(tcSet hotstuff.TCSet)
+}
+
 //go:generate mockgen -destination=../internal/mocks/acceptor_mock.go -package=mocks . Acceptor
 
 // Acceptor decides if a replica should accept a command.
@@ -149,6 +156,8 @@ type Consensus interface {
 	CommittedBlock() *hotstuff.Block
 	// ChainLength returns the number of blocks that need to be chained together in order to commit.
 	ChainLength() int
+	// ColletandSend collect TC from TCCache and send them to Client .
+	ColletandSend()
 }
 
 // LeaderRotation implements a leader rotation scheme.

@@ -15,6 +15,14 @@ service Client {
     option (gorums.quorumcall) = true;
     option (gorums.async) = true;
   }
+
+  rpc GetCli(CliRequest) returns (Command) {
+    option (gorums.quorumcall) = true;
+    option (gorums.async) = true;
+  }
+}
+
+message CliRequest {
 }
 
 // Command is the request that is sent to the HotStuff replicas with the data to

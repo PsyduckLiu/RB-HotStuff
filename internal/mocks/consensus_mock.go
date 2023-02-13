@@ -48,6 +48,18 @@ func (mr *MockConsensusMockRecorder) ChainLength() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChainLength", reflect.TypeOf((*MockConsensus)(nil).ChainLength))
 }
 
+// ColletandSend mocks base method.
+func (m *MockConsensus) ColletandSend() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ColletandSend")
+}
+
+// ColletandSend indicates an expected call of ColletandSend.
+func (mr *MockConsensusMockRecorder) ColletandSend() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ColletandSend", reflect.TypeOf((*MockConsensus)(nil).ColletandSend))
+}
+
 // CommittedBlock mocks base method.
 func (m *MockConsensus) CommittedBlock() *hotstuff.Block {
 	m.ctrl.T.Helper()

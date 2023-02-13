@@ -22,6 +22,7 @@ type Synchronizer struct {
 	leaderRotation modules.LeaderRotation
 	logger         logging.Logger
 	opts           *modules.Options
+	tcQueue        modules.TCQueue
 
 	currentView hotstuff.View
 	highTC      hotstuff.TimeoutCert
@@ -54,6 +55,7 @@ func (s *Synchronizer) InitModule(mods *modules.Core) {
 		&s.leaderRotation,
 		&s.logger,
 		&s.opts,
+		&s.tcQueue,
 	)
 
 	s.eventLoop.RegisterHandler(TimeoutEvent{}, func(event any) {
@@ -114,10 +116,13 @@ func (s *Synchronizer) Start(ctx context.Context) {
 		s.timer.Stop()
 	}()
 
+	go s.consensus.ColletandSend()
+
 	// start the initial proposal
 	if s.currentView == 1 && s.leaderRotation.GetLeader(s.currentView) == s.opts.ID() {
 		s.consensus.Propose(s.SyncInfo())
 	}
+
 }
 
 // HighQC returns the highest known QC.

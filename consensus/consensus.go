@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/relab/hotstuff"
 	"github.com/relab/hotstuff/eventloop"
@@ -41,7 +42,8 @@ type consensusBase struct {
 	acceptor       modules.Acceptor
 	blockChain     modules.BlockChain
 	commandQueue   modules.CommandQueue
-	TCQueue        modules.TCQueue
+	tcQueue        modules.TCQueue
+	cliQueue       modules.CliQueue
 	configuration  modules.Configuration
 	crypto         modules.Crypto
 	eventLoop      *eventloop.EventLoop
@@ -75,6 +77,8 @@ func (cs *consensusBase) InitModule(mods *modules.Core) {
 		&cs.acceptor,
 		&cs.blockChain,
 		&cs.commandQueue,
+		&cs.tcQueue,
+		&cs.cliQueue,
 		&cs.configuration,
 		&cs.crypto,
 		&cs.eventLoop,
@@ -110,6 +114,32 @@ func (cs *consensusBase) StopVoting(view hotstuff.View) {
 	}
 }
 
+// Collect TC from TCCache and send them to Client
+func (cs *consensusBase) ColletandSend() {
+	cs.logger.Debug("ColletandSend")
+
+	for {
+		time.Sleep(30 * time.Millisecond)
+		data := big.NewInt(0)
+		tcSet, ok := cs.tcQueue.GetTC(cs.synchronizer.ViewContext())
+		if !ok {
+			cs.logger.Debug("Propose: No TC")
+		}
+		if len(tcSet) != 0 {
+			for i, tc := range tcSet {
+				cs.logger.Infof("Number %v is %v", i, tc)
+				var bigTC big.Int
+				bigTC.SetBytes(tc)
+				data.Xor(data, &bigTC)
+			}
+			cs.cliQueue.AddTCSet(tcSet)
+		}
+
+		time.Sleep(20 * time.Millisecond)
+	}
+
+}
+
 // Propose creates a new proposal.
 func (cs *consensusBase) Propose(cert hotstuff.SyncInfo) {
 	cs.logger.Debug("Propose")
@@ -122,20 +152,6 @@ func (cs *consensusBase) Propose(cert hotstuff.SyncInfo) {
 		} else {
 			cs.logger.Errorf("Could not find block for QC: %s", qc)
 		}
-	}
-
-	tcSet, ok := cs.TCQueue.GetTC(cs.synchronizer.ViewContext())
-	if !ok {
-		cs.logger.Debug("Propose: No TC")
-		return
-	}
-
-	data := big.NewInt(0)
-	for i, tc := range tcSet {
-		cs.logger.Infof("Number %v is %v", i, tc)
-		var bigTC big.Int
-		bigTC.SetBytes(tc)
-		data.Xor(data, &bigTC)
 	}
 
 	cmd, ok := cs.commandQueue.Get(cs.synchronizer.ViewContext())

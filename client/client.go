@@ -39,6 +39,10 @@ func (q *qspec) ExecCommandQF(_ *clientpb.Command, signatures map[uint32]*emptyp
 	return &emptypb.Empty{}, true
 }
 
+func (q *qspec) GetCliQF(in *clientpb.CliRequest, replies map[uint32]*clientpb.Command) (*clientpb.Command, bool) {
+	return &clientpb.Command{}, true
+}
+
 type pendingCmd struct {
 	sequenceNumber uint64
 	sendTime       time.Time
@@ -238,6 +242,10 @@ loop:
 		data := randData.Bytes()
 		c.logger.Infof("Random data %v is %v", randData, data)
 
+		cliRequest := &clientpb.CliRequest{}
+		cmd := c.gorumsConfig.GetCli(ctx, cliRequest)
+		c.logger.Infof("Cmd is %v", cmd)
+
 		// data := make([]byte, c.payloadSize)
 		// n, err := c.reader.Read(data)
 		// if err != nil && err != io.EOF {
@@ -248,14 +256,14 @@ loop:
 		// 	c.logger.Info("Reached end of file. Sending empty commands until last command is executed...")
 		// }
 
-		cmd := &clientpb.Command{
-			ClientID:       uint32(c.opts.ID()),
-			SequenceNumber: num,
-			Data:           data,
-			// Data:           data[:n],
+		// cmd := &clientpb.Command{
+		// 	ClientID:       uint32(c.opts.ID()),
+		// 	SequenceNumber: num,
+		// 	Data:           data,
+		// 	// Data:           data[:n],
 
-		}
-		c.logger.Infof("Command data from %d is %v", cmd.GetSequenceNumber(), cmd.GetData())
+		// }
+		// c.logger.Infof("Command data from %d is %v", cmd.GetSequenceNumber(), cmd.GetData())
 
 		// ctx, cancel := context.WithTimeout(ctx, c.timeout)
 		// promise := c.gorumsConfig.ExecCommand(ctx, cmd)

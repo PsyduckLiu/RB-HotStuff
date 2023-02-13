@@ -121,6 +121,8 @@ func New(conf Config, builder modules.Builder) (replica *Replica) {
 		modules.ExtendedForkHandler(srv.clientSrv),
 		srv.clientSrv.cmdCache,
 		srv.clientSrv.cmdCache,
+		srv.clientSrv.cliCache,
+		srv.clientSrv.cliCache,
 
 		srv.sourcerSrv.tcCache,
 		srv.sourcerSrv.tcCache,
